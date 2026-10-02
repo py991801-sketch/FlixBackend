@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import requests
 from bs4 import BeautifulSoup
 import urllib.parse
-import re
 
 app = FastAPI()
 
@@ -17,7 +16,7 @@ app.add_middleware(
 
 @app.get("/")
 def home():
-    return {"status": "online", "message": "FlixTime Direct Media Scraper is Running!"}
+    return {"status": "online", "message": "FlixTime PirateBay Streaming Engine is Running!"}
 
 @app.get("/find_hindi_movie")
 def find_hindi_movie(title: str):
@@ -27,44 +26,34 @@ def find_hindi_movie(title: str):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
-        search_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query + ' dual audio hindi vegamovies hdhub4u pixeldrain')}"
-        response = requests.get(search_url, headers=headers, timeout=10)
+        # 1. The Pirate Bay se search karna (Hindi keyword ke sath)
+        search_query = urllib.parse.quote(f"{query} hindi")
+        tpb_url = f"https://www.thepiratebay3.site/search.php?q={search_query}"
         
-        direct_link = None
+        response = requests.get(tpb_url, headers=headers, timeout=15)
+        
+        magnet_link = None
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
-            results = soup.find_all('a', class_='result__url')
-            
-            for r in results:
-                href = r.get('href', '')
-                if any(domain in href for domain in ['vegamovies', 'hdhub4u', 'luxmovies', 'extramovies']):
-                    target_page = href
-                    page_res = requests.get(target_page, headers=headers, timeout=8)
-                    if page_res.status_code == 200:
-                        page_soup = BeautifulSoup(page_res.text, 'html.parser')
-                        for a in page_soup.find_all('a', href=True):
-                            link = a['href']
-                            # Pixeldrain direct stream link conversion check
-                            if 'pixeldrain.com/u/' in link:
-                                file_id = link.split('/u/')[-1].split('?')[0]
-                                direct_link = f"https://pixeldrain.com/api/file/{file_id}"
-                                break
-                            elif 'hubcloud' in link or '.mkv' in link or '.mp4' in link:
-                                direct_link = link
-                                break
-                    if direct_link:
-                        break
+            # Pehla magnet link dhoondhna
+            for a in soup.find_all('a', href=True):
+                if a['href'].startswith('magnet:?'):
+                    magnet_link = a['href']
+                    break
 
-        if direct_link:
+        # 2. Agar Magnet Link mil gaya toh use direct Webtor Streaming Player me convert kar do
+        if magnet_link:
+            stream_url = f"https://webtor.io/show?magnet={urllib.parse.quote(magnet_link)}"
             return {
                 "status": "success",
                 "title": query,
-                "type": "direct",
-                "server1": direct_link,
+                "type": "embed",
+                "server1": stream_url, # Server 1 ab seedha Pirate Bay ka magnet stream karega
                 "server2": f"https://vidsrc.to/embed/movie/{urllib.parse.quote(query)}",
                 "server3": f"https://autoembed.co/movie/tmdb/0?q={urllib.parse.quote(query)}"
             }
 
+        # Fallback agar Torrent par na mile
         return {
             "status": "success",
             "title": query,
@@ -80,7 +69,6 @@ def find_hindi_movie(title: str):
             "title": title,
             "type": "embed",
             "server1": f"https://vidsrc.to/embed/movie/0",
-            "server2": f"https://vidsrc.to/embed/movie/0",
-            "server3": f"https://vidsrc.to/embed/movie/0"
-        }
-        
+            "server2": f"https://autoembed.co/movie/tmdb/0",
+            "server3": f"https://vidsrc.me/embed/movie/0"
+            }
